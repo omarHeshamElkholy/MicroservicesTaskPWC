@@ -1,0 +1,56 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - REPOSITORY_URI=$ECR_REPOSITORY_URI
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker build --platform linux/amd64 -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - docker push $REPOSITORY_URI:latest
+      - echo Writing image definitions file...
+      - printf '[{"name":"microservices-app","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - echo Installing kubectl...
+      - curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.28.3/2023-11-14/bin/linux/amd64/kubectl
+      - chmod +x ./kubectl
+      - mv ./kubectl /usr/local/bin
+      - echo Configuring kubectl for EKS cluster...
+      - aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
+      - echo Deploying to EKS...
+      - cd Terraform/k8s-manifests
+      - sed -i "s|099861169058.dkr.ecr.us-east-1.amazonaws.com/microservices-app:latest|$REPOSITORY_URI:$IMAGE_TAG|g" ecr-deployment.yaml
+      - kubectl apply -f namespace.yaml
+      - kubectl apply -f ecr-deployment.yaml
+      - kubectl apply -f service.yaml
+      - kubectl apply -f ingress.yaml
+      - echo Waiting for deployment to be ready...
+      - kubectl wait --for=condition=available --timeout=300s deployment/microservices-app -n microservices
+      - echo Getting service information...
+      - kubectl get service microservices-service -n microservices
+      - echo Deployment completed successfully!
+
+artifacts:
+  files:
+    - imagedefinitions.json
+  name: microservices-app-$(date +%Y-%m-%d)
+
+cache:
+  paths:
+    - '/root/.docker/**/*'
