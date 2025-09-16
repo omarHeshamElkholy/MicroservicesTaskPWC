@@ -34,9 +34,9 @@ phases:
       - aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
       - echo Deploying to EKS...
       - cd Terraform/k8s-manifests
-      - sed -i "s|099861169058.dkr.ecr.us-east-1.amazonaws.com/microservices-app:latest|$REPOSITORY_URI:$IMAGE_TAG|g" ecr-deployment.yaml
       - kubectl apply -f namespace.yaml
-      - kubectl apply -f ecr-deployment.yaml
+      - kubectl apply -f deployment.yaml
+      - kubectl -n microservices set image deployment/microservices-app microservices-app=$REPOSITORY_URI:$IMAGE_TAG
       - kubectl apply -f service.yaml
       - kubectl apply -f ingress.yaml
       - echo Waiting for deployment to be ready...
