@@ -5,8 +5,8 @@ phases:
     commands:
       - echo Installing prerequisites and Terraform...
       - yum install -y unzip >/dev/null
-      - TF_VERSION=1.8.7
-      - curl -sS -o terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_${TF_VERSION}_linux_amd64.zip
+      - TF_VERSION=1.8.5
+      - curl -sSLo terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_${TF_VERSION}_linux_amd64.zip
       - unzip -o terraform.zip >/dev/null
       - mv -f terraform /usr/local/bin/
       - rm terraform.zip
