@@ -3,6 +3,21 @@ version: 0.2
 phases:
   pre_build:
     commands:
+      - echo Installing prerequisites and Terraform...
+      - yum install -y unzip >/dev/null
+      - TF_VERSION=1.8.7
+      - curl -sS -o terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_${TF_VERSION}_linux_amd64.zip
+      - unzip -o terraform.zip >/dev/null
+      - mv -f terraform /usr/local/bin/
+      - rm terraform.zip
+      - export TF_IN_AUTOMATION=1
+      - echo Initializing Terraform...
+      - terraform -chdir=Terraform init -input=false
+      - echo Creating Terraform plan...
+      - terraform -chdir=Terraform plan -input=false -out=tfplan
+      - terraform -chdir=Terraform show -no-color tfplan > tfplan.txt
+      - echo Applying Terraform plan...
+      - terraform -chdir=Terraform apply -input=false -auto-approve tfplan
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - echo Build started on `date`
@@ -48,6 +63,8 @@ phases:
 artifacts:
   files:
     - imagedefinitions.json
+    - Terraform/tfplan
+    - Terraform/tfplan.txt
   name: microservices-app-$(date +%Y-%m-%d)
 
 cache:
