@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: microservices-app
-        image: microservices-app:latest # This will be replaced with ECR image
+        image: 099861169058.dkr.ecr.us-east-1.amazonaws.com/microservices-app:latest
         ports:
         - containerPort: 8000
         resources:
@@ -45,4 +45,3 @@ spec:
           timeoutSeconds: 1
           successThreshold: 1
           failureThreshold: 3
-

@@ -125,6 +125,9 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# Terraform local state and plugins
+.terraform/
+
 # Pyre type checker
 .pyre/
 

@@ -10,6 +10,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc \
+        curl \
     && rm -rf /var/lib/apt/lists/*  # Clean up to reduce image size
 
 COPY requirements.txt .
