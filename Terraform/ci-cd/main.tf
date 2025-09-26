@@ -61,10 +61,17 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Effect = "Allow"
         Action = [
           "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams",
           "logs:CreateLogGroup",
+          "logs:DeleteLogGroup",
           "logs:CreateLogStream",
+          "logs:DeleteLogStream",
           "logs:PutLogEvents",
-          "logs:ListTagsForResource"
+          "logs:PutRetentionPolicy",
+          "logs:DeleteRetentionPolicy",
+          "logs:ListTagsForResource",
+          "logs:TagResource",
+          "logs:UntagResource"
         ]
         Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
       },
@@ -80,7 +87,14 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
           "ecr:DescribeRepositories",
-          "ecr:ListTagsForResource"
+          "ecr:CreateRepository",
+          "ecr:DeleteRepository",
+          "ecr:TagResource",
+          "ecr:UntagResource",
+          "ecr:ListTagsForResource",
+          "ecr:GetLifecyclePolicy",
+          "ecr:PutLifecyclePolicy",
+          "ecr:DeleteLifecyclePolicy"
         ]
         Resource = "*"
       },
@@ -88,7 +102,21 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Effect = "Allow"
         Action = [
           "eks:DescribeCluster",
-          "eks:ListClusters"
+          "eks:ListClusters",
+          "eks:CreateCluster",
+          "eks:DeleteCluster",
+          "eks:UpdateClusterConfig",
+          "eks:UpdateClusterVersion",
+          "eks:ListUpdates",
+          "eks:DescribeUpdate",
+          "eks:CreateNodegroup",
+          "eks:DeleteNodegroup",
+          "eks:UpdateNodegroupConfig",
+          "eks:UpdateNodegroupVersion",
+          "eks:DescribeNodegroup",
+          "eks:ListNodegroups",
+          "eks:TagResource",
+          "eks:UntagResource"
         ]
         Resource = "*"
       },
@@ -97,7 +125,31 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Action = [
           "iam:PassRole",
           "iam:GetRole",
-          "iam:ListRolePolicies"
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:CreateServiceLinkedRole"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "codebuild:BatchGetProjects",
+          "codebuild:CreateProject",
+          "codebuild:UpdateProject",
+          "codebuild:DeleteProject",
+          "codebuild:ListProjects",
+          "codebuild:TagResource",
+          "codebuild:UntagResource",
+          "codebuild:ListTagsForResource"
         ]
         Resource = "*"
       },
