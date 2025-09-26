@@ -37,3 +37,8 @@ variable "github_repo" {
   description = "GitHub repository name"
   type        = string
 }
+
+variable "tf_state_bucket" {
+  description = "S3 bucket used for Terraform state"
+  type        = string
+}

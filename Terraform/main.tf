@@ -20,5 +20,6 @@ module "ci_cd" {
   github_branch   = var.github_branch
   github_owner    = var.github_owner
   github_repo     = var.github_repo
-}
 
+  tf_state_bucket = var.tf_state_bucket
+}

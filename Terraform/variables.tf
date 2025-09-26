@@ -63,3 +63,9 @@ variable "github_repo" {
   type        = string
   default     = "MicroservicesTaskPWC"
 }
+
+variable "tf_state_bucket" {
+  description = "S3 bucket name for Terraform state"
+  type        = string
+  default     = "tfbackendz3"
+}
