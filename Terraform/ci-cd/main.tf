@@ -127,6 +127,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "iam:GetRole",
           "iam:ListRolePolicies",
           "iam:ListAttachedRolePolicies",
+          "iam:GetRolePolicy",
           "iam:CreateRole",
           "iam:DeleteRole",
           "iam:UpdateRole",
