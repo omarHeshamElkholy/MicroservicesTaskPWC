@@ -63,7 +63,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "logs:DescribeLogGroups",
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "logs:PutLogEvents",
+          "logs:ListTagsForResource"
         ]
         Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
       },
@@ -78,7 +79,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
-          "ecr:DescribeRepositories"
+          "ecr:DescribeRepositories",
+          "ecr:ListTagsForResource"
         ]
         Resource = "*"
       },
@@ -94,7 +96,8 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Effect = "Allow"
         Action = [
           "iam:PassRole",
-          "iam:GetRole"
+          "iam:GetRole",
+          "iam:ListRolePolicies"
         ]
         Resource = "*"
       },
@@ -102,6 +105,7 @@ resource "aws_iam_role_policy" "codebuild_policy" {
         Effect = "Allow"
         Action = [
           "ec2:DescribeVpcs",
+          "ec2:DescribeVpcAttribute",
           "ec2:DescribeSubnets",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeAvailabilityZones"
