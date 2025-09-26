@@ -19,3 +19,8 @@ output "codebuild_project_name" {
 }
 
 // Webhook outputs removed; webhook will be configured manually
+
+output "grafana_service_hostname" {
+  value       = try(data.kubernetes_service.grafana.status[0].load_balancer[0].ingress[0].hostname, null)
+  description = "Grafana LoadBalancer hostname (null until the service is provisioned)"
+}

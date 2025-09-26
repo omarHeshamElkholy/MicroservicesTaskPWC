@@ -1,0 +1,13 @@
+grafana:
+  adminUser: admin
+  adminPassword: changeme
+  service:
+    type: LoadBalancer
+
+prometheus:
+  service:
+    type: ClusterIP
+
+alertmanager:
+  service:
+    type: ClusterIP

@@ -13,13 +13,13 @@ variable "cluster_name" {
 variable "node_count" {
   description = "Number of worker nodes"
   type        = number
-  default     = 2
+  default     = 3
 }
 
 variable "instance_types" {
   description = "EC2 instance types for worker nodes"
   type        = list(string)
-  default     = ["t3.micro"]
+  default     = ["t3.small"]
 }
 
 variable "volume_size" {

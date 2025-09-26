@@ -70,3 +70,11 @@ This document summarizes the issues encountered while running, containerizing, a
 - Access service via:
   - `http://<loadbalancer-hostname>/users`
   - `http://<loadbalancer-hostname>/products`
+
+## 6) Monitoring Stack (Prometheus + Grafana)
+
+- Stack: Terraform deploys the `kube-prometheus-stack` Helm chart (Prometheus, Alertmanager, Grafana, kube-state-metrics, node-exporter) to the `monitoring` namespace and exposes Grafana through a `LoadBalancer` service.
+- Cluster capacity: The additional monitoring pods exceeded the `t3.micro` pod density limit. Scaling the EKS node group to three `t3.small` instances (with a max surge of +2) gives headroom for monitoring workloads and future app growth.
+- Terraform outputs: After `terraform apply`, check `grafana_service_hostname` for the AWS ELB DNS name once the LoadBalancer is ready. You can also run `kubectl get svc -n monitoring kube-prometheus-stack-grafana`.
+- Access Grafana: `http://<grafana-load-balancer>` with the default admin credentials from `monitoring-values.yaml` (`admin / changeme`). Rotate the password via Helm values or Kubernetes secret before production use.
+- Application dashboards: Import the built-in Kubernetes and node dashboards or scrape custom `/metrics` from the microservice to visualize app-level metrics.
