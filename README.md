@@ -1,80 +1,138 @@
-# MicroservicesTaskPWC — Issues and Resolutions
+# End-to-End Microservice Deployment Runbook
 
-This document summarizes the issues encountered while running, containerizing, and deploying the Flask microservice, along with the fixes applied and final run instructions.
+This runbook documents the exact steps followed to containerize a Python microservice, provision the required AWS infrastructure with Terraform, deploy to Kubernetes, expose the workload publicly, automate delivery with CodeBuild, and layer in monitoring via Prometheus/Grafana. The same workflow can be adapted to other cloud providers (the original request preferred Azure), but the implementation described here targets AWS.
 
-## 1) Local Environment and App Startup
+## 1. Clone the Source Repository
 
-- Problem: Flask/Werkzeug version mismatch causing ImportError:
-  - Error: `ImportError: cannot import name 'url_quote' from 'werkzeug.urls'`
-  - Cause: Flask 2.2.2 with newer Werkzeug (3.x)
-  - Resolution: Pin Werkzeug to a compatible version
-    - `requirements.txt`:
-      - `Flask==2.2.2`
-      - `Werkzeug==2.2.3`
-    - Reinstall: `pip install --upgrade -r requirements.txt`
+```bash
+git clone https://github.com/sameh-Tawfiq/Microservices.git
+cd Microservices
+```
 
-- Problem: App binding to wrong/default port (5000) and port conflicts due to working locally on a mac (port is used in airdrop)
-  - Cause: `run.py` used default `app.run()` (5000)
-  - Resolution: Updated to `app.run(host='0.0.0.0', port=8000)` to match `app/main.py`
+> The working tree in this project copies the service code into `app/` and supplements it with infrastructure, CI/CD, and monitoring assets.
 
-## 2) Dockerization
+## 2. Dockerize the Application
 
-- Additions in Dockerfile
-  - Non-root user for security (`USER appuser`)
-  - `PYTHONDONTWRITEBYTECODE=1` (avoid .pyc) and `PYTHONUNBUFFERED=1` (real-time logs)
-  - Clean apt metadata (`rm -rf /var/lib/apt/lists/*`) to keep image smaller
-  - Healthcheck hitting `/users`
+1. Review `Dockerfile` (root of the repo). It builds a slim Python 3.11 image, installs requirements, copies the Flask service, and exposes port `8000`.
+2. Build and test locally:
+   ```bash
+   docker build -t microservices-app:local .
+   docker run --rm -p 8000:8000 microservices-app:local
+   curl http://localhost:8000/users
+   ```
+3. Push to Amazon ECR (performed automatically in the CI/CD pipeline, but the manual steps are):
+   ```bash
+   aws ecr get-login-password --region us-east-1 \
+     | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+   docker tag microservices-app:local $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/microservices-app:latest
+   docker push $ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/microservices-app:latest
+   ```
 
-- Problem: Large image size (~800MB)
-  - Causes: base image + build tools (gcc) + Python deps
-  - Improvements (future):
-    - Use `--platform linux/amd64` only when required
-    - Consider `python:3.11-alpine` (validate deps) or multi-stage builds to drop build toolchain
-    - Ensure `.dockerignore` excludes venvs, caches, docs
+## 3. Provision the Kubernetes Cluster with Terraform (AWS EKS)
 
+1. Ensure prerequisites: Terraform ≥ 1.4, AWS CLI, kubectl, and an S3 bucket `tfbackendz3` for remote state.
+2. Review Terraform layout under `Terraform/`:
+   - `main.tf` wires the `k8s-cluster` and `ci-cd` modules.
+   - `providers.tf` configures AWS, Kubernetes, and Helm providers with the S3 backend.
+   - `variables.tf` holds tunables (cluster name, instance types, CodeBuild project name, etc.).
+3. Initialize and plan:
+   ```bash
+   terraform -chdir=Terraform init
+   terraform -chdir=Terraform plan
+   ```
+4. Apply to create the EKS control plane, node group (three `t3.small` nodes), IAM roles, and supporting resources:
+   ```bash
+   terraform -chdir=Terraform apply
+   ```
+5. Export cluster credentials:
+   ```bash
+   aws eks update-kubeconfig --region us-east-1 --name microservices-cluster
+   kubectl get nodes
+   ```
 
-## 3) Kubernetes with Terraform (EKS)
+> The Terraform module originally requested Azure; swapping the AWS provider for an AzureRM-backed module will achieve that with the same structure.
 
-- Problem: EKS UnsupportedAvailabilityZoneException (e.g., `us-east-1e` unsupported for control plane)
-  - Resolution: Filter subnets to supported AZs only (e.g., a/b/c/d/f) in `main.tf`
+## 4. Deploy the Microservice to Kubernetes
 
-- Problem: t3.micro pod capacity very small → Pods Pending: `Too many pods`
-  - Resolution options applied:
-    - Reduce replicas to `1` and lower resource requests/limits
-    - Optionally increase node group desired size via Terraform
+1. Kubernetes manifests reside in `Terraform/k8s-manifests/`:
+   - `namespace.yaml`
+   - `deployment.yaml`
+   - `service.yaml`
+   - `ingress.yaml`
+2. Apply them after the cluster is ready:
+   ```bash
+   kubectl apply -f Terraform/k8s-manifests/namespace.yaml
+   kubectl apply -f Terraform/k8s-manifests/deployment.yaml
+   kubectl apply -f Terraform/k8s-manifests/service.yaml
+   kubectl apply -f Terraform/k8s-manifests/ingress.yaml
+   kubectl wait --for=condition=available deployment/microservices-app -n microservices --timeout=5m
+   ```
+3. Validate:
+   ```bash
+   kubectl get pods -n microservices
+   kubectl get svc -n microservices microservices-service
+   ```
 
-- Problem: `no match for platform in manifest`
-  - Cause: Built on Apple Silicon (arm64) while EKS nodes are amd64
-  - Resolution: Build for amd64 explicitly:
-    - `docker build --platform linux/amd64 -t <ECR_URI>:latest .`
-    - `docker push <ECR_URI>:latest`
+## 5. Expose the Service to the Internet
 
-## 4) CI/CD & Terraform Automation Issues
+- `service.yaml` defines a `LoadBalancer` Service; AWS provisions an ELB and returns its hostname.
+- Retrieve the external address:
+  ```bash
+  kubectl get svc microservices-service -n microservices -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+  ```
+- Hit the public endpoints, e.g. `http://<elb-hostname>/users` and `/products`.
 
-- Problem: Terraform plan/apply in CodeBuild could not read remote state/backend objects
-  - Errors: `AccessDeniedException` for `s3:GetObject`, `DescribeRepositories`, `GetRole`, `DescribeLogGroups`, `DescribeVpcs`, etc.
-  - Resolution: Expanded the CodeBuild IAM inline policy to include read/list actions for ECR, IAM, CloudWatch Logs, EC2 metadata, S3 state bucket, and other Terraform-managed services.
+## 6. Implement CI/CD with AWS CodeBuild
 
-- Problem: `kubectl` in CodeBuild returned `You must be logged in to the server`
-  - Cause: The CodeBuild IAM role was not mapped into Kubernetes RBAC
-  - Resolution: Manage the EKS `aws-auth` ConfigMap via Terraform, mapping
-    - Worker node role → `system:bootstrappers`,`system:nodes`
-    - CodeBuild role → `system:masters`
-  - Implementation: Added Kubernetes provider + `kubernetes_config_map_v1.aws_auth` with the required role entries.
+1. The pipeline definition lives under `Terraform/ci-cd/`:
+   - Creates an ECR repository, CodeBuild project, IAM roles, and CloudWatch log group.
+   - Injects repository URL, branch, and Terraform backend configuration via variables.
+2. `buildspec.yml` drives the build:
+   - Installs Terraform and kubectl.
+   - Runs `terraform init/plan/apply` (using the repo’s Terraform directory).
+   - Builds and pushes the Docker image to ECR.
+   - Applies Kubernetes manifests and waits for rollout.
+3. Trigger a build manually:
+   ```bash
+   aws codebuild start-build --project-name microservices-cicd
+   aws codebuild batch-get-builds --ids microservices-cicd:<build-id>
+   ```
+4. A successful run produces the image, updates the deployment, and logs results to `/aws/codebuild/microservices-cicd`.
 
-## 5) Final Verification
+## 7. Add Monitoring (Prometheus & Grafana)
 
-- Check nodes: `kubectl get nodes`
-- Check pods: `kubectl get pods -n microservices`
-- Check service: `kubectl get svc -n microservices`
-- Access service via:
-  - `http://<loadbalancer-hostname>/users`
-  - `http://<loadbalancer-hostname>/products`
+1. Monitoring configuration sits in `Terraform/monitoring.tf` with Helm values in `Terraform/monitoring-values.yaml`.
+2. Terraform provisions a `monitoring` namespace and installs the `kube-prometheus-stack` Helm chart (Prometheus, Grafana, Alertmanager, kube-state-metrics, and node exporters).
+3. Grafana is exposed via LoadBalancer:
+   ```bash
+   terraform -chdir=Terraform output grafana_service_hostname
+   # or
+   kubectl get svc -n monitoring kube-prometheus-stack-grafana
+   ```
+4. Default credentials (`admin / changeme`) are defined in `monitoring-values.yaml`; change them immediately for production.
+5. Built-in dashboards (Nodes, Pods, Kubernetes/Compute Resources) are pre-loaded. Add custom dashboards or configure application metrics by exposing `/metrics` endpoints.
 
-## 6) Monitoring Stack (Prometheus + Grafana)
+## 8. Clean Up (Optional)
 
-- Stack: Terraform deploys the `kube-prometheus-stack` Helm chart (Prometheus, Alertmanager, Grafana, kube-state-metrics, node-exporter) to the `monitoring` namespace and exposes Grafana through a `LoadBalancer` service.
-- Cluster capacity: The additional monitoring pods exceeded the `t3.micro` pod density limit. Scaling the EKS node group to three `t3.small` instances (with a max surge of +2) gives headroom for monitoring workloads and future app growth.
-- Terraform outputs: After `terraform apply`, check `grafana_service_hostname` for the AWS ELB DNS name once the LoadBalancer is ready. You can also run `kubectl get svc -n monitoring kube-prometheus-stack-grafana`.
-- Access Grafana: `http://<grafana-load-balancer>` with the default admin credentials from `monitoring-values.yaml` (`admin / changeme`). Rotate the password via Helm values or Kubernetes secret before production use.
-- Application dashboards: Import the built-in Kubernetes and node dashboards or scrape custom `/metrics` from the microservice to visualize app-level metrics.
+To avoid ongoing costs when testing is complete:
+
+```bash
+terraform -chdir=Terraform destroy
+# If ECR contains images, remove them first:
+aws ecr list-images --repository-name microservices-app
+aws ecr batch-delete-image --repository-name microservices-app --image-ids imageTag=<tag>
+terraform -chdir=Terraform destroy
+```
+
+Also delete the Terraform state file in S3 (`tfbackendz3/terraform.tfstate`) if you no longer need it.
+
+---
+
+## Key Repository Paths
+
+- `Dockerfile`, `requirements.txt`, `run.py` – application container assets
+- `Terraform/` – infrastructure-as-code for EKS, CodeBuild, and monitoring
+- `Terraform/k8s-manifests/` – raw Kubernetes YAML for the microservice
+- `buildspec.yml` – CodeBuild pipeline definition
+
+This README serves as the reproducible playbook for rebuilding the environment from scratch, adapting it to other clouds, and understanding how each piece fits together.
